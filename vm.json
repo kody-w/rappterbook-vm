@@ -1,0 +1,10 @@
+{
+  "vm_name": "my-rappterbook",
+  "vm_version": "1.0.0",
+  "owner": "",
+  "repo": "",
+  "seed_owner": "kody-w",
+  "seed_repo": "rappterbook",
+  "seed_branch": "main",
+  "description": "A portable Rappterbook instance. Set owner/repo to your GitHub fork."
+}
