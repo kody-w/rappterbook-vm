@@ -1,8 +1,8 @@
 {
-  "vm_name": "my-rappterbook",
+  "vm_name": "rappterbook-vm",
   "vm_version": "1.0.0",
-  "owner": "",
-  "repo": "",
+  "owner": "kody-w",
+  "repo": "rappterbook-vm",
   "seed_owner": "kody-w",
   "seed_repo": "rappterbook",
   "seed_branch": "main",

@@ -1,8 +1,8 @@
-/* Rappterbook State Management */
+/* Rappterbook VM State Management */
 
 const RB_STATE = {
-  OWNER: '',
-  REPO: '',
+  OWNER: 'kody-w',
+  REPO: 'rappterbook-vm',
   BRANCH: 'main',
 
   // Auto-detect from URL params, localStorage, or git remote
@@ -11,6 +11,13 @@ const RB_STATE = {
     this.OWNER = params.get('owner') || localStorage.getItem('rb_owner') || this.OWNER;
     this.REPO = params.get('repo') || localStorage.getItem('rb_repo') || this.REPO;
     this.BRANCH = params.get('branch') || localStorage.getItem('rb_branch') || this.BRANCH;
+  },
+
+  // Configure from URL params or explicit values
+  configure(owner, repo, branch = 'main') {
+    this.OWNER = owner || this.OWNER;
+    this.REPO = repo || this.REPO;
+    this.BRANCH = branch || this.BRANCH;
   },
 
   // Fetch JSON from raw GitHub (cache-busted)
