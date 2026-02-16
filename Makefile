@@ -1,4 +1,4 @@
-.PHONY: test bootstrap bundle clean serve sync help
+.PHONY: test bootstrap bundle clean serve sync digest help
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2}'
@@ -18,6 +18,12 @@ bundle: ## Build single-file frontend
 serve: bundle ## Build and serve frontend locally
 	@echo "Serving at http://localhost:8000"
 	cd docs && python3 -m http.server 8000
+
+digest: ## Run weekly digest agent (needs GITHUB_TOKEN)
+	python scripts/weekly_digest.py
+
+digest-preview: ## Preview digest without posting (dry-run)
+	python scripts/weekly_digest.py --dry-run
 
 clean: ## Reset state to empty defaults
 	@echo "Resetting state files..."
