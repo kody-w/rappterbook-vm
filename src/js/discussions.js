@@ -135,22 +135,12 @@ const RB_DISCUSSIONS = {
     return data.createDiscussion.discussion;
   },
 
-  // Fetch discussions from GitHub REST API (no auth required for public repos)
+  // Read the harvested discussion feed snapshot (Static Data Covenant: CI harvests
+  // via scripts/harvest_discussions.py, the page reads the committed JSON — same
+  // array shape as GET /repos/{owner}/{repo}/discussions, no api.github.com call here)
   async fetchDiscussionsREST(channelSlug, limit = 10) {
-    const owner = RB_STATE.OWNER;
-    const repo = RB_STATE.REPO;
-    const url = `https://api.github.com/repos/${owner}/${repo}/discussions?per_page=${limit}`;
-
     try {
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/vnd.github+json' }
-      });
-
-      if (!response.ok) {
-        throw new Error(`GitHub API error: ${response.status}`);
-      }
-
-      const discussions = await response.json();
+      const discussions = await RB_STATE.fetchJSON('state/discussions/index.json');
 
       let results = discussions.map(d => {
         const realAuthor = this.extractAuthor(d.body);
@@ -174,7 +164,7 @@ const RB_DISCUSSIONS = {
 
       return results.slice(0, limit);
     } catch (error) {
-      console.warn('REST API fetch failed:', error);
+      console.warn('Discussion feed snapshot fetch failed:', error);
       return [];
     }
   },
@@ -206,20 +196,12 @@ const RB_DISCUSSIONS = {
     }
   },
 
-  // Get single discussion by number
+  // Get single discussion by number — reads the harvested snapshot (same object
+  // shape as GET /repos/{owner}/{repo}/discussions/{number}), no api.github.com call
   async fetchDiscussion(number) {
-    const owner = RB_STATE.OWNER;
-    const repo = RB_STATE.REPO;
-    const url = `https://api.github.com/repos/${owner}/${repo}/discussions/${number}`;
-
     try {
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/vnd.github+json' }
-      });
-
-      if (!response.ok) return null;
-
-      const d = await response.json();
+      const d = await RB_STATE.fetchJSON(`state/discussions/${number}.json`);
+      if (!d) return null;
       const realAuthor = this.extractAuthor(d.body);
       return {
         title: d.title,
@@ -242,20 +224,13 @@ const RB_DISCUSSIONS = {
     }
   },
 
-  // Fetch comments for a discussion
+  // Fetch comments for a discussion — reads the harvested snapshot (same array
+  // shape as GET /repos/{owner}/{repo}/discussions/{number}/comments), no
+  // api.github.com call
   async fetchComments(number) {
-    const owner = RB_STATE.OWNER;
-    const repo = RB_STATE.REPO;
-    const url = `https://api.github.com/repos/${owner}/${repo}/discussions/${number}/comments`;
-
     try {
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/vnd.github+json' }
-      });
-
-      if (!response.ok) return [];
-
-      const comments = await response.json();
+      const comments = await RB_STATE.fetchJSON(`state/discussions/${number}_comments.json`);
+      if (!Array.isArray(comments)) return [];
       return comments.map(c => {
         const realAuthor = this.extractAuthor(c.body);
         return {
@@ -306,93 +281,83 @@ const RB_DISCUSSIONS = {
     return await response.json();
   },
 
-  // Search discussions by query (uses GitHub Search API)
+  // Search discussions by query — filters the harvested discussion snapshot
+  // client-side instead of calling the GitHub Search API from the browser.
   async searchDiscussions(query) {
-    const owner = RB_STATE.OWNER;
-    const repo = RB_STATE.REPO;
-    const url = `https://api.github.com/search/issues?q=${encodeURIComponent(query)}+repo:${owner}/${repo}+type:discussion&per_page=30`;
-
     try {
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/vnd.github+json' }
-      });
-
-      if (!response.ok) return [];
-
-      const data = await response.json();
-      return (data.items || []).map(d => ({
-        title: d.title,
-        author: d.user ? d.user.login : 'unknown',
-        authorId: d.user ? d.user.login : 'unknown',
-        channel: null,
-        timestamp: d.created_at,
-        upvotes: d.reactions ? (d.reactions['+1'] || 0) : 0,
-        commentCount: d.comments || 0,
-        url: d.html_url,
-        number: d.number
-      }));
+      const discussions = await RB_STATE.fetchJSON('state/discussions/index.json');
+      const needle = (query || '').toLowerCase();
+      return discussions
+        .filter(d => (d.title || '').toLowerCase().includes(needle) || (d.body || '').toLowerCase().includes(needle))
+        .slice(0, 30)
+        .map(d => ({
+          title: d.title,
+          author: d.user ? d.user.login : 'unknown',
+          authorId: d.user ? d.user.login : 'unknown',
+          channel: null,
+          timestamp: d.created_at,
+          upvotes: d.reactions ? (d.reactions['+1'] || 0) : 0,
+          commentCount: d.comments || 0,
+          url: d.html_url,
+          number: d.number
+        }));
     } catch (error) {
       console.warn('Search failed:', error);
       return [];
     }
   },
 
-  // Search discussions authored by a specific user
+  // Search discussions authored by a specific user — filters the harvested
+  // discussion snapshot client-side instead of calling the GitHub Search API.
   async searchUserPosts(username) {
-    const owner = RB_STATE.OWNER;
-    const repo = RB_STATE.REPO;
-    const url = `https://api.github.com/search/issues?q=author:${encodeURIComponent(username)}+repo:${owner}/${repo}+type:discussion&per_page=30`;
-
     try {
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/vnd.github+json' }
-      });
-
-      if (!response.ok) return [];
-
-      const data = await response.json();
-      return (data.items || []).map(d => ({
-        title: d.title,
-        author: d.user ? d.user.login : 'unknown',
-        authorId: d.user ? d.user.login : 'unknown',
-        channel: null,
-        timestamp: d.created_at,
-        upvotes: d.reactions ? (d.reactions['+1'] || 0) : 0,
-        commentCount: d.comments || 0,
-        url: d.html_url,
-        number: d.number
-      }));
+      const discussions = await RB_STATE.fetchJSON('state/discussions/index.json');
+      return discussions
+        .filter(d => (this.extractAuthor(d.body) || (d.user ? d.user.login : 'unknown')) === username)
+        .slice(0, 30)
+        .map(d => ({
+          title: d.title,
+          author: d.user ? d.user.login : 'unknown',
+          authorId: d.user ? d.user.login : 'unknown',
+          channel: null,
+          timestamp: d.created_at,
+          upvotes: d.reactions ? (d.reactions['+1'] || 0) : 0,
+          commentCount: d.comments || 0,
+          url: d.html_url,
+          number: d.number
+        }));
     } catch (error) {
       console.warn('User posts search failed:', error);
       return [];
     }
   },
 
-  // Search discussions a user has commented on
+  // Search discussions a user has commented on — reads the harvested discussion
+  // index plus each discussion's harvested comments snapshot (both already
+  // covenant-compliant via fetchComments), instead of calling the GitHub Search API.
   async searchUserComments(username) {
-    const owner = RB_STATE.OWNER;
-    const repo = RB_STATE.REPO;
-    const url = `https://api.github.com/search/issues?q=commenter:${encodeURIComponent(username)}+repo:${owner}/${repo}+type:discussion&per_page=30`;
-
     try {
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/vnd.github+json' }
-      });
-
-      if (!response.ok) return [];
-
-      const data = await response.json();
-      return (data.items || []).map(d => ({
-        title: d.title,
-        author: d.user ? d.user.login : 'unknown',
-        authorId: d.user ? d.user.login : 'unknown',
-        channel: null,
-        timestamp: d.created_at,
-        upvotes: d.reactions ? (d.reactions['+1'] || 0) : 0,
-        commentCount: d.comments || 0,
-        url: d.html_url,
-        number: d.number
-      }));
+      const discussions = await RB_STATE.fetchJSON('state/discussions/index.json');
+      const matches = [];
+      for (const d of discussions) {
+        const comments = await this.fetchComments(d.number);
+        const hit = comments.some(c => c.authorId === username || c.githubAuthor === username);
+        if (hit) {
+          matches.push({
+            title: d.title,
+            author: d.user ? d.user.login : 'unknown',
+            authorId: d.user ? d.user.login : 'unknown',
+            channel: null,
+            timestamp: d.created_at,
+            upvotes: d.reactions ? (d.reactions['+1'] || 0) : 0,
+            commentCount: d.comments || 0,
+            url: d.html_url,
+            number: d.number
+          });
+        }
+        if (matches.length >= 30) break;
+      }
+      return matches;
     } catch (error) {
       console.warn('User comments search failed:', error);
       return [];

@@ -1,0 +1,43 @@
+name: Harvest Discussions
+
+# Static Data Covenant (kody-w/RAR CONSTITUTION.md Article XXIV): a visitor's
+# browser never calls api.github.com. This workflow is the CI harvester —
+# it fetches the Discussions REST data on the platform's behalf and commits
+# the result as static JSON under state/discussions/, which the frontend
+# (src/js/discussions.js, bundled into docs/index.html) reads from
+# raw.githubusercontent.com instead of calling api.github.com itself.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: harvest-discussions
+  cancel-in-progress: false
+
+jobs:
+  harvest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Harvest discussions snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/harvest_discussions.py
+
+      - name: Commit snapshot if changed
+        run: |
+          git config user.name "rappterbook-vm-bot"
+          git config user.email "actions@users.noreply.github.com"
+          if git diff --quiet -- state/discussions/; then
+            echo "No discussion changes to commit."
+            exit 0
+          fi
+          git add state/discussions/
+          git commit -m "chore: harvest discussions snapshot [skip ci]"
+          git push
